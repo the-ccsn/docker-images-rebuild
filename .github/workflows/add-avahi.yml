@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "0 3 * * *"
   workflow_dispatch:
+    inputs:
+      bypass_check:
+        description: 'True to skip check'
+        required: true
+        type: boolean
 
 jobs:
   check-updates:
@@ -35,7 +40,12 @@ jobs:
 
   build:
     needs: check-updates
-    if: needs.check-updates.outputs.needs_build == 'true'
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    if: needs.check-updates.outputs.needs_build == 'true' || ${{ inputs.bypass_check }
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -104,6 +114,11 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     needs: build
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
     steps:
       - name: Cleanup old Debian versions
         uses: actions/delete-package-versions@v5
