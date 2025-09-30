@@ -1,32 +1,28 @@
 name: Build and Push Docker Images with Avahi
 
 on:
-  schedule:
-    - cron: "0 3 * * *"
-  workflow_dispatch:
+  workflow_call:
     inputs:
+      base_image:
+        required: true
+        type: string
       bypass_check:
-        description: 'Bypass checking'
+        required: true
+        type: boolean
+      enable_cleanup:
         required: true
         type: boolean
 
 jobs:
   check-updates:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        base_image:
-          - vaultwarden/server:latest
-          - louislam/uptime-kuma:beta
-          - wikihostinc/looking-glass-server:latest
     steps:
-    
       - name: Check if base image updated
         id: check
         if: ${{ !inputs.bypass_check }}
         uses: lucacome/docker-image-update-checker@v2
         with:
-          base-image: ${{ matrix.base_image }}
+          base-image: ${{ inputs.base_image }}
           image: ghcr.io/${{ github.repository_owner }}/$(echo ${{ matrix.base_image }} | cut '-d:' '-f1' | tr '/' '-')
 
       - name: Save outputs
@@ -133,7 +129,8 @@ jobs:
 
   cleanup:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [check-updates, build]
+    if: enable_cleanup
     permissions:
       contents: read
       packages: write
@@ -143,20 +140,6 @@ jobs:
       - name: Cleanup old Debian versions
         uses: actions/delete-package-versions@v5
         with:
-          package-name: debian
-          package-type: container
-          min-versions-to-keep: 5
-
-      - name: Cleanup old Ubuntu versions
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: ubuntu
-          package-type: container
-          min-versions-to-keep: 5
-
-      - name: Cleanup old Alpine versions
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: alpine
+          package-name: ${{ needs.check-updates.outputs.image_name }}
           package-type: container
           min-versions-to-keep: 5
