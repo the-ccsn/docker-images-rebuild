@@ -85,10 +85,15 @@ jobs:
       - name: Generate Dockerfile
         id: genfile
         run: |
-          echo "FROM ${{ needs.check-updates.outputs.base_image }}" > Dockerfile
+          echo "FROM ${{ matrix.base_image }}" > Dockerfile
           cat >> Dockerfile <<'EOF'
-          RUN apt-get update && apt-get install -y avahi-daemon avahi-utils libnss-mdns && rm -rf /var/lib/apt/lists/* || \
-              (apk add --no-cache avahi dbus && true)
+          RUN apt-get update && apt-get install -y avahi-daemon avahi-utils libnss-mdns && rm -rf /var/lib/apt/lists/*
+
+          RUN echo '#!/bin/bash\n\
+          avahi-daemon --no-drop-root --daemonize\n\
+          exec "$@"' > /usr/local/bin/entrypoint-wrapper.sh && chmod +x /usr/local/bin/entrypoint-wrapper.sh
+
+          ENTRYPOINT ["/usr/local/bin/entrypoint-wrapper.sh"]
           EOF
 
           echo "dockerfile<<EOF" >> $GITHUB_OUTPUT
