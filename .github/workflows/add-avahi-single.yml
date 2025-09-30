@@ -23,12 +23,12 @@ jobs:
         uses: lucacome/docker-image-update-checker@v2
         with:
           base-image: ${{ inputs.base_image }}
-          image: ghcr.io/${{ github.repository_owner }}/$(echo ${{ matrix.base_image }} | cut '-d:' '-f1' | tr '/' '-')
+          image: ghcr.io/${{ github.repository_owner }}/$(echo ${{ inputs.base_image }} | cut '-d:' '-f1' | tr '/' '-')
 
       - name: Save outputs
         id: save
         run: |
-          BASE="${{ matrix.base_image }}"
+          BASE="${{ inputs.base_image }}"
           NAME=$(echo "$BASE" | cut -d: -f1 | tr '/' '-')
           TAG=$(echo "$BASE" | cut -d: -f2)
           DIGEST="${{ steps.check.outputs.digest }}"
@@ -81,7 +81,7 @@ jobs:
       - name: Generate Dockerfile
         id: genfile
         run: |
-          echo "FROM ${{ matrix.base_image }}" > Dockerfile
+          echo "FROM ${{ inputs.base_image }}" > Dockerfile
           cat >> Dockerfile <<'EOF'
           RUN apt-get update && apt-get install -y avahi-daemon avahi-utils libnss-mdns && rm -rf /var/lib/apt/lists/*
 
