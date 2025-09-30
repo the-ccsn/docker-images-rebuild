@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       bypass_check:
-        description: 'True to skip check'
+        description: 'Bypass checking'
         required: true
         type: boolean
 
@@ -20,9 +20,11 @@ jobs:
           - ubuntu:22.04
           - alpine:3.20
     steps:
+    
       - name: Check if base image updated
         id: check
-        uses: lucacome/docker-image-update-checker@v1
+        if: ${{ !inputs.bypass_check }}
+        uses: lucacome/docker-image-update-checker@v2
         with:
           base-image: ${{ matrix.base_image }}
           image: ghcr.io/${{ github.repository_owner }}/$(echo ${{ matrix.base_image }} | cut '-d:' '-f1' | tr '/' '-')
@@ -34,7 +36,7 @@ jobs:
           echo "digest=${{ steps.check.outputs.digest }}" >> $GITHUB_OUTPUT
           echo "base_image=${{ matrix.base_image }}" >> $GITHUB_OUTPUT
     outputs:
-      needs_build: ${{ steps.save.outputs.needs_build }}
+      needs_build: ${{ steps.save.outputs.needs_build || 'true' }}
       digest: ${{ steps.save.outputs.digest }}
       base_image: ${{ steps.save.outputs.base_image }}
 
