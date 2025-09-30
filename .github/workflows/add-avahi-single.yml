@@ -83,8 +83,14 @@ jobs:
         run: |
           echo "FROM ${{ inputs.base_image }}" > Dockerfile
           cat >> Dockerfile <<'EOF'
-          RUN apt-get update && apt-get install -y avahi-daemon avahi-utils libnss-mdns && rm -rf /var/lib/apt/lists/*
-
+          RUN if [ -f /etc/debian_version ]; then \
+            apt-get update && apt-get install -y avahi-daemon avahi-utils libnss-mdns && rm -rf /var/lib/apt/lists/*; \
+          elif [ -f /etc/alpine-release ]; then \
+              apk add --no-cache avahi dbus avahi-utils nss-mdns; \
+          else \
+              echo "Unsupported base image" && exit 1; \
+          fi
+          
           RUN echo '#!/bin/bash\n\
           avahi-daemon --no-drop-root --daemonize\n\
           exec "$@"' > /usr/local/bin/entrypoint-wrapper.sh && chmod +x /usr/local/bin/entrypoint-wrapper.sh
