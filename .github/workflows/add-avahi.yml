@@ -32,13 +32,26 @@ jobs:
       - name: Save outputs
         id: save
         run: |
+          BASE="${{ matrix.base_image }}"
+          NAME=$(echo "$BASE" | cut -d: -f1 | tr '/' '-')
+          TAG=$(echo "$BASE" | cut -d: -f2)
+          DIGEST="${{ steps.check.outputs.digest }}"
+          DIGEST_SHORT=$(echo "$DIGEST" | sed 's/sha256://; s/[^a-zA-Z0-9]//g' | cut -c1-12)
+
           echo "needs_build=${{ steps.check.outputs.needs_build }}" >> $GITHUB_OUTPUT
-          echo "digest=${{ steps.check.outputs.digest }}" >> $GITHUB_OUTPUT
-          echo "base_image=${{ matrix.base_image }}" >> $GITHUB_OUTPUT
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          echo "digest_short=$DIGEST_SHORT" >> $GITHUB_OUTPUT
+          echo "base_image=$BASE" >> $GITHUB_OUTPUT
+          echo "image_name=$NAME" >> $GITHUB_OUTPUT
+          echo "image_tag=$TAG" >> $GITHUB_OUTPUT
+          
     outputs:
-      needs_build: ${{ steps.save.outputs.needs_build || 'true' }}
+      needs_build: ${{ steps.save.outputs.needs_build }}
       digest: ${{ steps.save.outputs.digest }}
+      digest_short: ${{ steps.save.outputs.digest_short }}
       base_image: ${{ steps.save.outputs.base_image }}
+      image_name: ${{ steps.save.outputs.image_name }}
+      image_tag: ${{ steps.save.outputs.image_tag }}
 
   build:
     needs: check-updates
@@ -96,7 +109,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.check-updates.outputs.base_image }}-${{ needs.check-updates.outputs.digest }}
+          tag_name: ${{ steps.parse.outputs.name }}-${{ needs.check-updates.outputs.digest_short || 'manual' }}
           name: "Update ${{ needs.check-updates.outputs.base_image }}"
           body: |
             ### 📦 New Docker Image
