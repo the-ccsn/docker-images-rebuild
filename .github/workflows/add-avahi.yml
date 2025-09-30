@@ -11,10 +11,9 @@ jobs:
     strategy:
       matrix:
         base_image:
-          - debian:trixie
-    outputs:
-      needs_build_${{ matrix.base_image }}: ${{ steps.check.outputs.needs_build }}
-      digest_${{ matrix.base_image }}: ${{ steps.check.outputs.digest }}
+          - debian:bookworm
+          - ubuntu:22.04
+          - alpine:3.20
     steps:
       - name: Check if base image updated
         id: check
@@ -23,14 +22,21 @@ jobs:
           base-image: ${{ matrix.base_image }}
           image: ghcr.io/${{ github.repository_owner }}/$(echo ${{ matrix.base_image }} | cut '-d:' '-f1' | tr '/' '-')
 
+      - name: Save outputs
+        id: save
+        run: |
+          echo "needs_build=${{ steps.check.outputs.needs_build }}" >> $GITHUB_OUTPUT
+          echo "digest=${{ steps.check.outputs.digest }}" >> $GITHUB_OUTPUT
+          echo "base_image=${{ matrix.base_image }}" >> $GITHUB_OUTPUT
+    outputs:
+      needs_build: ${{ steps.save.outputs.needs_build }}
+      digest: ${{ steps.save.outputs.digest }}
+      base_image: ${{ steps.save.outputs.base_image }}
+
   build:
     needs: check-updates
+    if: needs.check-updates.outputs.needs_build == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        base_image:
-          - debian:bookworm
-    if: needs.check-updates.outputs['needs_build_${{ matrix.base_image }}'] == 'true'
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -42,51 +48,53 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Parse image name and tag
+        id: parse
+        run: |
+          BASE="${{ needs.check-updates.outputs.base_image }}"
+          NAME=$(echo "$BASE" | cut -d: -f1 | tr '/' '-')
+          TAG=$(echo "$BASE" | cut -d: -f2)
+          echo "name=$NAME" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
       - name: Generate Dockerfile
         id: genfile
         run: |
-          BASE=${{ matrix.base_image }}
-          cat > Dockerfile <<EOF
-          FROM $BASE
+          echo "FROM ${{ needs.check-updates.outputs.base_image }}" > Dockerfile
+          cat >> Dockerfile <<'EOF'
           RUN apt-get update && apt-get install -y avahi-daemon avahi-utils libnss-mdns && rm -rf /var/lib/apt/lists/* || \
               (apk add --no-cache avahi dbus && true)
           EOF
+
           echo "dockerfile<<EOF" >> $GITHUB_OUTPUT
           cat Dockerfile >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Build Docker image with Avahi
         run: |
-          BASE=${{ matrix.base_image }}
-          NAME=$(echo $BASE | cut -d: -f1 | tr '/' '-')
-          TAG=$(echo $BASE | cut -d: -f2)
-
-          docker build -t ghcr.io/${{ github.repository_owner }}/$NAME:$TAG \
-                       -t ghcr.io/${{ github.repository_owner }}/$NAME:latest .
+          docker build \
+            -t ghcr.io/${{ github.repository_owner }}/${{ steps.parse.outputs.name }}:${{ steps.parse.outputs.tag }} \
+            -t ghcr.io/${{ github.repository_owner }}/${{ steps.parse.outputs.name }}:latest .
 
       - name: Push Docker image
         run: |
-          BASE=${{ matrix.base_image }}
-          NAME=$(echo $BASE | cut -d: -f1 | tr '/' '-')
-          TAG=$(echo $BASE | cut -d: -f2)
-
-          docker push ghcr.io/${{ github.repository_owner }}/$NAME:$TAG
-          docker push ghcr.io/${{ github.repository_owner }}/$NAME:latest
+          docker push ghcr.io/${{ github.repository_owner }}/${{ steps.parse.outputs.name }}:${{ steps.parse.outputs.tag }}
+          docker push ghcr.io/${{ github.repository_owner }}/${{ steps.parse.outputs.name }}:latest
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ matrix.base_image }}-${{ needs.check-updates.outputs['digest_${{ matrix.base_image }}'] }}
-          name: "Update ${{ matrix.base_image }}"
+          tag_name: ${{ needs.check-updates.outputs.base_image }}-${{ needs.check-updates.outputs.digest }}
+          name: "Update ${{ needs.check-updates.outputs.base_image }}"
           body: |
             ### 📦 New Docker Image
-            - **Base Image**: `${{ matrix.base_image }}`
-            - **Digest**: `${{ needs.check-updates.outputs['digest_${{ matrix.base_image }}'] }}`
+            - **Base Image**: `${{ needs.check-updates.outputs.base_image }}`
+            - **Digest**: `${{ needs.check-updates.outputs.digest }}`
             - **Published at**: ${{ github.run_started_at }}
 
             Images pushed:
-            - `ghcr.io/${{ github.repository_owner }}/$(echo ${{ matrix.base_image }} | cut -d: -f1 | tr '/' '-'):${{ matrix.base_image##*: }}`
-            - `ghcr.io/${{ github.repository_owner }}/$(echo ${{ matrix.base_image }} | cut -d: -f1 | tr '/' '-')`:latest
+            - `ghcr.io/${{ github.repository_owner }}/${{ steps.parse.outputs.name }}:${{ steps.parse.outputs.tag }}`
+            - `ghcr.io/${{ github.repository_owner }}/${{ steps.parse.outputs.name }}:latest`
 
             ### 📝 Dockerfile used for build
             ```Dockerfile
@@ -97,9 +105,23 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: Cleanup old package versions
+      - name: Cleanup old Debian versions
         uses: actions/delete-package-versions@v5
         with:
           package-name: debian
+          package-type: container
+          min-versions-to-keep: 5
+
+      - name: Cleanup old Ubuntu versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ubuntu
+          package-type: container
+          min-versions-to-keep: 5
+
+      - name: Cleanup old Alpine versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: alpine
           package-type: container
           min-versions-to-keep: 5
