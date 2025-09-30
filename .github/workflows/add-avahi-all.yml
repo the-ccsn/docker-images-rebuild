@@ -1,0 +1,32 @@
+name: Build and Push Docker Images with Avahi
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      bypass_check:
+        description: 'Bypass checking'
+        required: true
+        type: boolean
+
+jobs:
+  matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        base_image:
+          - vaultwarden/server:latest
+          - louislam/uptime-kuma:beta
+          - wikihostinc/looking-glass-server:latest
+    secrets: inherit
+    permissions:
+      contents: write
+      packages: write
+      attestations: write
+      id-token: write
+    uses: ./.github/workflows/add-avahi-single.yml
+    with:
+      base_image: ${{ matrix.base_image }}
+      bypass_check: ${{ inputs.bypass_check }}
+      enable_cleanup: true
