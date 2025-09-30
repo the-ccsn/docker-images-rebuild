@@ -16,9 +16,9 @@ jobs:
     strategy:
       matrix:
         base_image:
-          - debian:bookworm
-          - ubuntu:22.04
-          - alpine:3.20
+          - vaultwarden/server:latest
+          - louislam/uptime-kuma:beta
+          - wikihostinc/looking-glass-server:latest
     steps:
     
       - name: Check if base image updated
