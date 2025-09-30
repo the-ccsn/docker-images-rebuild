@@ -45,7 +45,7 @@ jobs:
       packages: write
       attestations: write
       id-token: write
-    if: needs.check-updates.outputs.needs_build == 'true' || ${{ inputs.bypass_check }
+    if: needs.check-updates.outputs.needs_build == 'true' || ${{ inputs.bypass_check }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
